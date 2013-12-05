@@ -197,31 +197,16 @@ function listRepoIssues(repo_url){
 
             // Print the result
             // ------------------
-
-            $.each( data, function(index, value) {
-
-                // Manage json objects that not are mandatory
-                if(value.assignee == null)  value.assignee  = {login: 'not assigned'};
-                if(value.milestone == null) value.milestone = {title: ''};
-
-                if (argv.bodynewlines === 'n') {
-                    value.body = value.body.replace(/(\r\n|\n|\r)/gm,"");    
-                }
-                
-                // create array of the labels
-                var labels = [];
-                $.each( value.labels, function(index, value) {
-                    labels.push(value.name);
-                });
-
-
-                // Print the result to stdout
-                (argv.full) ? log( [value.number, value.id, value.title, value.state, value.user.login, value.assignee.login, value.created_at, value.updated_at, value.closed_at, value.milestone.title, 
-                                    labels.join(','), value.comments, value.body].join(sep) ) :
-                              log( [value.number, value.id, value.title, value.state, value.user.login, value.assignee.login, value.created_at, value.updated_at, value.closed_at, value.milestone.title, 
-                                    labels.join(','), value.comments].join(sep) ) ;
-            });
-
+			
+			$.each( data, function(index, value) {
+                        if(value.comments != "0"){
+	                        $.when(getIssueComments(value.number))
+	                        .then(function() { logData(index, value) } );
+                        } else{
+                            comments = null;
+                            logData(index, value);
+                        }
+			});
             parseHttpHeaders(jqXHR);
 
         },
@@ -235,6 +220,51 @@ function listRepoIssues(repo_url){
 
     return request;
 
+}
+
+//gets the comments for an issue
+function getIssueComments(issueNumber) {
+	logDebug('Get Comments: Getting comments for issue number ' + issueNumber);
+	var request = $.ajax({
+			url : 'https://api.github.com/repos/' + argv.owner + '/' + argv.repo + '/issues/' + issueNumber + '/comments?access_token=' + oauthToken.token,
+			type : 'GET',
+			success : function (data) {
+				logDebug('getIssueComments: Yea, it worked...' + JSON.stringify(data));
+				comments = data;
+			},
+			error : function (data) {
+				logErr('getIssueComments: Shit hit the fan...' + JSON.stringify(data));
+			}
+		});
+	return request;
+}
+
+//logs the data into console
+function logData(index, value){
+	// Manage json objects that not are mandatory
+    if(value.assignee == null)  value.assignee  = {login: 'not assigned'};
+    if(value.milestone == null) value.milestone = {title: ''};
+
+    // create array of the labels
+    var labels = [];
+    $.each( value.labels, function(index, value) {
+      labels.push(value.name);
+    });
+	
+	if(comments != null){
+		$.each( comments, function(index, comment) {
+			 (argv.full) ? log([value.number, value.id, value.title, value.state, value.user.login, value.assignee.login, value.created_at, value.milestone.title,
+			 		labels.join(','), value.comments, value.body, '"' +comment.user.login + '"', '"' +comment.body.replace(/[\r\t\n]/g, " ") + '"'].join(sep)) :
+			 log([value.number, value.id, value.title, value.state, value.user.login, value.assignee.login, value.created_at, value.milestone.title,
+			 		labels.join(','), value.comments, '"' + comment.user.login + '"', '"' + comment.body.replace(/[\r\t\n]/g, " ") + '"'].join(sep));
+		});
+	} else {
+		//Print the result to stdout
+		(argv.full) ? log([value.number, value.id, value.title, value.state, value.user.login, value.assignee.login, value.created_at, value.milestone.title,
+				labels.join(','), value.comments, value.body].join(sep)) :
+		log([value.number, value.id, value.title, value.state, value.user.login, value.assignee.login, value.created_at, value.milestone.title,
+				labels.join(','), value.comments].join(sep));
+	}
 }
 
 //
